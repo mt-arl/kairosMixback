@@ -5,10 +5,8 @@ import { Database } from './database/Database.js';
 import productRoutes from './routes/productRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 
-
 dotenv.config();
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Inicializar Singleton DB
 const db = Database.getInstance();
@@ -19,3 +17,5 @@ app.use(express.json());
 app.use('/api/products', productRoutes);
 app.use('/api/clients', clientRoutes);
 
+// *IMPORTANTE*: Quita la línea app.listen() y EXPORTA la app
+export default app;
