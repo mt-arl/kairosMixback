@@ -4,7 +4,7 @@ import { createProduct, getProducts, updateProduct, searchProducts, deactivatePr
 
 const router = Router();
 
-router.post('/c', createProduct);
+router.post('/', createProduct);
 router.get('/search', searchProducts);
 router.get('/', getProducts);
 router.put('/:id', updateProduct);
