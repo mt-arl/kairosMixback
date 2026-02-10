@@ -9,9 +9,20 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
     try {
         const { name, pricePerPound, wholesalePrice, retailPrice, originCountry, initialStock, imageUrl } = req.body;
 
+        // Validaciones de campos requeridos
+        if (!name || !originCountry || initialStock === undefined) {
+            res.status(400).json({ message: 'Nombre, país de origen e inventario inicial son requeridos' });
+            return;
+        }
+
         // REQ001.3: Validaciones de Precios y Stock
         if (pricePerPound <= 0.01 || wholesalePrice <= 0.01 || retailPrice <= 0.01) {
             res.status(400).json({ message: 'Los precios deben ser mayores a 0.01' });
+            return;
+        }
+
+        if (initialStock < 0) {
+            res.status(400).json({ message: 'El stock inicial no puede ser negativo' });
             return;
         }
 
@@ -34,8 +45,9 @@ export const createProduct = async (req: Request, res: Response): Promise<void> 
         });
 
         res.status(201).json({ message: 'Producto registrado', product: newProduct });
-    } catch (error) {
-        res.status(500).json({ message: 'Error interno al crear producto', error });
+    } catch (error: any) {
+        console.error('Error al crear producto:', error);
+        res.status(500).json({ message: 'Error interno al crear producto', error: error.message });
     }
 };
 

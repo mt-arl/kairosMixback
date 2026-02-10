@@ -1,91 +1,69 @@
 import { Request, Response } from 'express';
-import { RepositoryFactory } from '../factories/RepositoryFactory.js'; // <--- FACTORY
+import { RepositoryFactory } from '../factories/RepositoryFactory.js';
 
-// Usamos Factory
+// Usamos el Factory para obtener el repositorio
 const clientRepo = RepositoryFactory.getClientRepository();
 
-// Crear cliente
+// --- 1. CREAR / REGISTRAR CLIENTE (TC-CLIE-001) ---
 export const createClient = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { cedula, nombre, correo, telefono, direccion } = req.body;
+        const { cedula, nombre, correo, telefono, direccion, password } = req.body;
 
-        // ===== VALIDACIONES =====
-
-        // Validar campos requeridos
-        if (!cedula || !nombre || !correo || !telefono || !direccion) {
-            res.status(400).json({ message: 'Todos los campos son requeridos' });
+        // Validaciones de campos requeridos
+        if (!cedula || !nombre || !correo || !telefono || !direccion || !password) {
+            res.status(400).json({ message: 'Todos los campos son requeridos, incluida la contraseña' });
             return;
         }
 
-        // Validar que los campos no estén vacíos (solo espacios)
-        if (!cedula.trim() || !nombre.trim() || !correo.trim() || !telefono.trim() || !direccion.trim()) {
-            res.status(400).json({ message: 'Los campos no pueden estar vacíos' });
+        // Validar formato de identificación (Cédula 10 o RUC 13)
+        const cedulaRegex = /^\d{10}$/;
+        const rucRegex = /^\d{13}$/;
+        if (!cedulaRegex.test(cedula) && !rucRegex.test(cedula)) {
+            res.status(400).json({ message: 'Formato de identificación inválido' });
             return;
         }
 
-        // Validar formato de Número de Identificación (Cédula, RUC o Pasaporte)
-        const cedulaRegex = /^\d{10}$/;  // Cédula: 10 dígitos numéricos
-        const rucRegex = /^\d{13}$/;     // RUC: 13 dígitos numéricos
-        const passportRegex = /^[A-Za-z0-9]{6,9}$/;  // Pasaporte: 6-9 caracteres alfanuméricos
-
-        const isValidCedula = cedulaRegex.test(cedula);
-        const isValidRuc = rucRegex.test(cedula);
-        const isValidPassport = passportRegex.test(cedula);
-
-        if (!isValidCedula && !isValidRuc && !isValidPassport) {
-            res.status(400).json({ 
-                message: 'Formato de identificación inválido. Debe ser: Cédula (10 dígitos), RUC (13 dígitos) o Pasaporte (6-9 caracteres alfanuméricos)' 
-            });
+        // Validar contraseña
+        if (password.length < 6) {
+            res.status(400).json({ message: 'La contraseña debe tener al menos 6 caracteres' });
             return;
         }
 
-        // Validar cédula única
+        // Validar si ya existe
         const existingClient = await clientRepo.findByCedula(cedula);
         if (existingClient) {
             res.status(400).json({ message: 'El número de identificación ya está registrado' });
             return;
         }
 
-        // Validar formato de correo electrónico
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(correo)) {
-            res.status(400).json({ message: 'Formato de correo electrónico inválido' });
-            return;
-        }
-
-        // Validar formato de teléfono (10 dígitos)
-        const phoneRegex = /^\d{10}$/;
-        if (!phoneRegex.test(telefono)) {
-            res.status(400).json({ message: 'Formato de teléfono inválido. Debe tener 10 dígitos numéricos' });
-            return;
-        }
-
-        // ===== CREAR CLIENTE =====
-
+        // Crear cliente (El modelo se encarga de encriptar el password)
         const newClient = await clientRepo.create({
             cedula,
             nombre,
             correo,
             telefono,
             direccion,
+            password,
             isActive: true
         });
 
+        console.log('✅ Cliente creado:', { cedula, nombre, correo });
+
         res.status(201).json({ 
             message: 'Cliente registrado exitosamente', 
-            client: newClient 
+            client: { 
+                nombre: newClient.nombre, 
+                correo: newClient.correo,
+                cedula: newClient.cedula
+            }
         });
     } catch (error: any) {
-        // Error de cédula duplicada (por si acaso pasa la validación previa)
-        if (error.code === 11000) {
-            res.status(400).json({ message: 'El número de identificación ya está registrado' });
-            return;
-        }
-        res.status(500).json({ message: 'Error al registrar cliente', error });
+        console.error('❌ Error al registrar cliente:', error);
+        res.status(500).json({ message: 'Error al registrar cliente', error: error.message });
     }
 };
 
-// Obtener todos los clientes
+// --- 2. OBTENER TODOS LOS CLIENTES ---
 export const getClients = async (req: Request, res: Response): Promise<void> => {
     try {
         const clients = await clientRepo.findAll();
@@ -95,7 +73,7 @@ export const getClients = async (req: Request, res: Response): Promise<void> => 
     }
 };
 
-// Obtener cliente por ID
+// --- 3. OBTENER CLIENTE POR ID ---
 export const getClientById = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
@@ -105,56 +83,41 @@ export const getClientById = async (req: Request, res: Response): Promise<void> 
             res.status(404).json({ message: 'Cliente no encontrado' });
             return;
         }
-
         res.status(200).json(client);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener cliente', error });
     }
 };
 
-// Actualizar cliente
+// --- 4. ACTUALIZAR CLIENTE (TC-CLIE-004) ---
 export const updateClient = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const { nombre, correo, telefono, direccion } = req.body;
 
-        const updateData: any = {};
-        if (nombre !== undefined) updateData.nombre = nombre;
-        if (correo !== undefined) updateData.correo = correo;
-        if (telefono !== undefined) updateData.telefono = telefono;
-        if (direccion !== undefined) updateData.direccion = direccion;
-
-        const updatedClient = await clientRepo.update(id, updateData);
+        const updatedClient = await clientRepo.update(id, { nombre, correo, telefono, direccion });
 
         if (!updatedClient) {
             res.status(404).json({ message: 'Cliente no encontrado' });
             return;
         }
-
-        res.status(200).json({ 
-            message: 'Cliente actualizado exitosamente', 
-            client: updatedClient 
-        });
+        res.status(200).json({ message: 'Cliente actualizado', client: updatedClient });
     } catch (error) {
         res.status(500).json({ message: 'Error al actualizar cliente', error });
     }
 };
 
-// Desactivar cliente
+// --- 5. DESACTIVAR CLIENTE (EL QUE CAUSABA EL ERROR) ---
 export const deactivateClient = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
         const client = await clientRepo.deactivate(id);
 
         if (!client) {
-            res.status(404).json({ message: 'Cliente no encontrado o ya está inactivo' });
+            res.status(404).json({ message: 'Cliente no encontrado o ya inactivo' });
             return;
         }
-
-        res.status(200).json({ 
-            message: 'Cliente desactivado exitosamente', 
-            client 
-        });
+        res.status(200).json({ message: 'Cliente desactivado exitosamente', client });
     } catch (error) {
         res.status(500).json({ message: 'Error al desactivar cliente', error });
     }
