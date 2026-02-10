@@ -26,7 +26,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
         // --- FASE 1: VALIDACIÓN Y CÁLCULO ---
         for (const item of items) {
 
-            // CASO A: ES UN PRODUCTO NORMAL
+            // CASO A: ES UN PRODUCTO (INDIVIDUAL O POR LIBRAS)
             if (item.productId) {
                 // Validar que el ID sea un ObjectId válido de MongoDB
                 if (!mongoose.Types.ObjectId.isValid(item.productId)) {
@@ -38,19 +38,36 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
                 const product = await productRepo.findById(item.productId) as IProduct;
                 if (!product) return res.status(404).json({ message: `Producto no encontrado: ${item.productId}` });
 
+                // Detectar si es compra por LIBRAS (mezcla) o por UNIDADES (producto individual)
+                // Si quantity < 1 o si viene con unit: 'lbs', es una mezcla por libras
+                const isByWeight = item.unit === 'lbs' || item.quantity < 1;
+
                 if (product.currentStock < item.quantity) {
                     return res.status(400).json({ message: `Sin stock: ${product.name}` });
+                }
+
+                let itemPrice;
+                let priceUsed;
+
+                if (isByWeight) {
+                    // COMPRA POR LIBRAS (para mezcla personalizada)
+                    priceUsed = product.pricePerPound;
+                    itemPrice = product.pricePerPound * item.quantity;
+                } else {
+                    // COMPRA DE PRODUCTO INDIVIDUAL (bolsa completa)
+                    priceUsed = product.retailPrice;
+                    itemPrice = product.retailPrice * item.quantity;
                 }
 
                 orderItems.push({
                     product: product._id,
                     quantity: item.quantity,
-                    priceAtPurchase: product.retailPrice
+                    priceAtPurchase: priceUsed
                 });
-                totalOrder += product.retailPrice * item.quantity;
+                totalOrder += itemPrice;
             }
 
-            // CASO B: ES UNA MEZCLA PERSONALIZADA
+            // CASO B: ES UNA MEZCLA PERSONALIZADA GUARDADA
             else if (item.mixId) {
                 // Buscamos la mezcla
                 const mix = await mixRepo.findById(item.mixId) as ICustomMix;
